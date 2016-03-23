@@ -1,6 +1,10 @@
 """Test requsts and scraping facilities in scraper.py."""
 import pytest
 
+
+TEST_FILE = 'write_test.txt'
+
+
 ERROR_CASES = [
     (('<html><span>'
       'Error: A database error occured when attempting to retrieve requested '
@@ -44,22 +48,37 @@ def test_missing_required_params():
 def test_write_to_file():
     """Test that program can write to a file without raising an error."""
     from scraper import write_to_file
-    filename = 'write_test.txt'
     bytes_content = b'This is some bytes of text.'
     encoding = 'utf-8'
-    write_to_file(filename, bytes_content, encoding)
+    write_to_file(TEST_FILE, bytes_content, encoding)
     assert True
 
 
-# def test_wrong_value_param():
-#     """Test get_inspection_page raises error when given wrong parameters."""
-#     from scraper import get_inspection_page
-#     with pytest.raises(requests.RequestException):
-#         get_inspection_page(City='Seattle', bad_param='val')
+def test_read_from_file():
+    """Test that we can read from a file without error."""
+    from scraper import read_from_file
+    assert read_from_file(TEST_FILE) == 'This is some bytes of text.'
 
 
-# def test_get_inspection_page_response(good_params):
-#     """Test that good request returns a 200 Response with bytes content."""
-#     from scraper import get_inspection_page
-#     content, encoding = get_inspection_page(**good_params)
-#     assert isinstance(content, bytes) and encoding
+def test_wrong_value_param():
+    """Test get_inspection_page raises error when given wrong parameters."""
+    from scraper import get_inspection_page
+    with pytest.raises(ValueError):
+        get_inspection_page(City='Seattle', bad_param='val')
+
+
+# test_db_error
+
+def test_get_inspection_page_response(good_params):
+    """Test that good request returns a 200 Response with bytes content."""
+    from scraper import get_inspection_page
+    content, encoding = get_inspection_page(**good_params)
+    assert isinstance(content, bytes) and encoding
+
+
+def test_main():
+    """Test that main function reads and writes to file with default params."""
+    from scraper import main, read_from_file, INSPECTION_HTML_FILE
+    main()
+    results = read_from_file(INSPECTION_HTML_FILE)
+    assert results
