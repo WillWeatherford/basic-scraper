@@ -1,7 +1,7 @@
 """Test requsts and scraping facilities in scraper.py."""
 import pytest
 
-
+TEST_CONTENT = b'<html><div>This is some nice HTML</div><p>Yep, HTML</p></html>'
 TEST_FILE = 'write_test.txt'
 
 
@@ -20,7 +20,7 @@ def good_params():
     from scraper import PARAMS
     params = PARAMS.copy()
     params['Business_Name'] = 'CodeFellows'
-    params['City'] = 'CodeFellows'
+    params['City'] = 'Seattle'
     return params
 
 
@@ -48,16 +48,15 @@ def test_missing_required_params():
 def test_write_to_file():
     """Test that program can write to a file without raising an error."""
     from scraper import write_to_file
-    bytes_content = b'This is some bytes of text.'
     encoding = 'utf-8'
-    write_to_file(TEST_FILE, bytes_content, encoding)
+    write_to_file(TEST_FILE, TEST_CONTENT, encoding)
     assert True
 
 
 def test_read_from_file():
     """Test that we can read from a file without error."""
     from scraper import read_from_file
-    assert read_from_file(TEST_FILE) == 'This is some bytes of text.'
+    assert read_from_file(TEST_FILE) == TEST_CONTENT
 
 
 def test_wrong_value_param():
@@ -67,18 +66,34 @@ def test_wrong_value_param():
         get_inspection_page(City='Seattle', bad_param='val')
 
 
-# test_db_error
+def test_parse_file_source():
+    from bs4 import BeautifulSoup
+    from scraper import read_from_file, parse_source
+    content = read_from_file(TEST_FILE)
+    result = parse_source(content)
+    assert isinstance(result, BeautifulSoup)
 
-def test_get_inspection_page_response(good_params):
-    """Test that good request returns a 200 Response with bytes content."""
-    from scraper import get_inspection_page
-    content, encoding = get_inspection_page(**good_params)
-    assert isinstance(content, bytes) and encoding
+
+# def test_parse_web_source(good_params):
+#     from bs4 import BeautifulSoup
+#     from scraper import get_inspection_page, parse_source
+#     content, encoding = get_inspection_page(**good_params)
+#     result = parse_source(content, encoding)
+#     assert isinstance(result, BeautifulSoup)
 
 
-def test_main():
-    """Test that main function reads and writes to file with default params."""
-    from scraper import main, read_from_file, INSPECTION_HTML_FILE
-    main()
-    results = read_from_file(INSPECTION_HTML_FILE)
-    assert results
+# # test_db_error
+
+# def test_get_inspection_page_response(good_params):
+#     """Test that good request returns a 200 Response with bytes content."""
+#     from scraper import get_inspection_page
+#     content, encoding = get_inspection_page(**good_params)
+#     assert isinstance(content, bytes) and encoding
+
+
+# def test_main():
+#     """Test that main function reads and writes to file with default params."""
+#     from scraper import main, read_from_file, INSPECTION_HTML_FILE
+#     main()
+#     results = read_from_file(INSPECTION_HTML_FILE)
+#     assert results
