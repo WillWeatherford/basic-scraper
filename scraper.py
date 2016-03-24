@@ -59,16 +59,19 @@ def get_inspection_page(**params):
             raise ValueError('"{}" is not a valid parameter.'.format(key))
 
     root_url = ''.join([DOMAIN, SEARCH_PATH])
+
     response = requests.get(root_url, params=params)
-    if has_error(response.text):
-        raise requests.RequestException('kingcounty.gov database error.')
+    content, encoding = response.content, response.encoding
     response.raise_for_status()
-    return response.content, response.encoding
+    if has_error(content, encoding):
+        raise requests.RequestException('kingcounty.gov database error.')
+
+    return content, encoding
 
 
-def has_error(u_content):
+def has_error(content, encoding):
     """Search HTML content to determine if content contains error message."""
-    soup = BeautifulSoup(u_content)
+    soup = BeautifulSoup(content, 'html5lib', from_encoding=encoding)
     return bool(soup.find(string=re.compile(ERROR_PATTERN)))
 
 
@@ -145,9 +148,11 @@ def extract_score_data(listing):
     insp_rows = listing.find_all(is_ispection_row)
     scores = [int(clean_data(list(row.children)[2])) for row in insp_rows]
     num_scores = str(len(scores))
-    highest = str(max(scores)) if scores else 'N/A'
-    avg = '{0:.2f}'.format(sum(scores) / float(num_scores))\
-        if scores else 'N/A'
+    if scores:
+        highest = str(max(scores))
+        avg = '{0:.2f}'.format(sum(scores) / float(num_scores))
+    else:
+        highest, avg = 'N/A', 'N/A'
     return {
         'Number of Inspections': num_scores,
         'Highest Inspection Score': highest,
