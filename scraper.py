@@ -42,26 +42,6 @@ ERROR_PATTERN = r'Error: .*'
 INSPECTION_HTML_FILE = 'inspection_page.html'
 
 
-def main(command='normal', **params):
-    """Main function to run from command line."""
-
-    if command == 'normal':
-        final_params = DEFAULT_PARAMS.copy()
-        final_params.update(params)
-        content, encoding = get_inspection_page(**final_params)
-        write_to_file(INSPECTION_HTML_FILE, content, encoding)
-    elif command == 'test':
-        content, encoding = read_from_file(INSPECTION_HTML_FILE)
-
-    soup = parse_source(content, encoding)
-    listings = extract_data_listings(soup)
-    # print(len(listings))
-    # print(listings[0].prettify())
-    for listing in listings[:5]:
-        print(extract_restaurant_metadata(listing))
-        print('\n')
-
-
 def get_inspection_page(**params):
     """Get search result page from health inspection site."""
     req_params = [p for p in REQUIRED_PARAMS if params.get(p, '')]
@@ -87,7 +67,7 @@ def get_inspection_page(**params):
 
 
 def has_error(u_content):
-    """Search HTML content to determine if content contains an error message."""
+    """Search HTML content to determine if content contains error message."""
     soup = BeautifulSoup(u_content)
     return bool(soup.find(string=re.compile(ERROR_PATTERN)))
 
@@ -125,7 +105,7 @@ def has_two_tds(tag):
 
 
 def clean_data(tag):
-    """Returns only the string of given tag."""
+    """Return only the string of given tag."""
     try:
         return tag.string.strip(' \n:-')
     except AttributeError:
@@ -149,6 +129,52 @@ def extract_restaurant_metadata(listing):
             value = ' '.join([prev_value, value])
         data[param] = value
     return data
+
+
+def is_ispection_row(tag):
+    """Determine if a tag is table row with inspection score data."""
+    cells = tag.find_all('td', recursive=False)
+    return tag.name == 'tr' and\
+        len(cells) == 4 and\
+        'Inspection' in (cells[0].string or '') and\
+        (cells[2].string or '').isdigit()
+
+
+def extract_score_data(listing):
+    """Return dictionary of score data, including total, highest and avg."""
+    insp_rows = listing.find_all(is_ispection_row)
+    scores = [int(clean_data(list(row.children)[2])) for row in insp_rows]
+    num_scores = str(len(scores))
+    highest = str(max(scores)) if scores else 'N/A'
+    avg = '{0:.2f}'.format(sum(scores) / float(num_scores))\
+        if scores else 'N/A'
+    return {
+        'Number of Inspections': num_scores,
+        'Highest Inspection Score': highest,
+        'Average Inspection Score': avg
+    }
+
+
+def main(command='normal', **params):
+    """Main function to run from command line."""
+    if command == 'normal':
+        final_params = DEFAULT_PARAMS.copy()
+        final_params.update(params)
+        content, encoding = get_inspection_page(**final_params)
+        write_to_file(INSPECTION_HTML_FILE, content, encoding)
+    elif command == 'test':
+        content, encoding = read_from_file(INSPECTION_HTML_FILE)
+
+    soup = parse_source(content, encoding)
+    listings = extract_data_listings(soup)
+    for listing in listings:
+        metadata = extract_restaurant_metadata(listing)
+        inspection_data = extract_score_data(listing)
+        inspection_data.update(metadata)
+        for k, v in inspection_data.items():
+            print('{:<30} {:<30}'.format('{}:'.format(k), v))
+        print('\n')
+
 
 if __name__ == '__main__':
     args = sys.argv[1:]

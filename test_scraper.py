@@ -56,7 +56,7 @@ def test_write_to_file():
 def test_read_from_file():
     """Test that we can read from a file without error."""
     from scraper import read_from_file
-    assert read_from_file(TEST_FILE) == TEST_CONTENT
+    assert read_from_file(TEST_FILE) == (TEST_CONTENT, 'utf-8')
 
 
 def test_wrong_value_param():
@@ -67,10 +67,11 @@ def test_wrong_value_param():
 
 
 def test_parse_file_source():
+    """Test that BeautifulSoup object will be passed from HTML file."""
     from bs4 import BeautifulSoup
     from scraper import read_from_file, parse_source
-    content = read_from_file(TEST_FILE)
-    result = parse_source(content)
+    content, encoding = read_from_file(TEST_FILE)
+    result = parse_source(content, encoding)
     assert isinstance(result, BeautifulSoup)
 
 
