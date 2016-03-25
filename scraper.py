@@ -2,6 +2,7 @@
 
 import re
 import sys
+import json
 import pprint
 import geocoder
 import requests
@@ -209,8 +210,13 @@ def generate_results(command, num_results, **params):
 
 def main(command='normal', num_results=9999999, **params):
     """Main function to run from command line."""
+    collection = {'type': 'FeatureCollection', 'features': []}
     for result in generate_results(command, num_results, **params):
-        pprint.pprint(get_geojson(result))
+        geojson = get_geojson(result)
+        pprint.pprint(geojson)
+        collection['features'].append(geojson)
+    with open('inspection_map.json', 'w') as fh:
+        json.dump(collection, fh)
 
 
 if __name__ == '__main__':
