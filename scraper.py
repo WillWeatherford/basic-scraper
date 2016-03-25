@@ -2,6 +2,7 @@
 
 import re
 import sys
+import geocoder
 import requests
 from bs4 import BeautifulSoup
 
@@ -85,7 +86,6 @@ def read_from_file(filename):
     """Read unicode from given filename."""
     with open(filename, 'rb') as fh:
         text = fh.read()
-        # use chardet to guess encoding
         return text, 'utf-8'
 
 
@@ -160,8 +160,14 @@ def extract_score_data(listing):
     }
 
 
-def main(command='normal', **params):
-    """Main function to run from command line."""
+def get_geojson(result):
+    """Return geoJSON data from the address of a given inspection result."""
+    response = geocoder.google(result['Address'])
+    return response.geojson
+
+
+def generate_results(command='normal', **params):
+    """Generate dictionaries of inspection data results."""
     if command == 'normal':
         final_params = DEFAULT_PARAMS.copy()
         final_params.update(params)
@@ -172,13 +178,17 @@ def main(command='normal', **params):
 
     soup = parse_source(content, encoding)
     listings = extract_data_listings(soup)
-    for listing in listings:
+    for listing in listings[:10]:
         metadata = extract_restaurant_metadata(listing)
         inspection_data = extract_score_data(listing)
         inspection_data.update(metadata)
-        for k, v in inspection_data.items():
-            print('{:<30} {:<30}'.format('{}:'.format(k), v))
-        print('\n')
+        yield inspection_data
+
+
+def main(command='normal', **params):
+    """Main function to run from command line."""
+    for result in generate_results(command, **params):
+        print(get_geojson(result))
 
 
 if __name__ == '__main__':
