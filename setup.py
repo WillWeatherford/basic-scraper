@@ -12,9 +12,10 @@ with open(os.path.join(here, 'CHANGES.txt')) as f:
 
 requires = [
     'bs4',
+    'requests',
 ]
 
-test_require = ['pytest', 'pytest-watch', 'pytest-cov', 'tox']
+test_require = ['pytest', 'pytest-watch', 'pytest-cov', 'tox', 'bs4']
 dev_requires = ['ipython']
 
 setup(name='basic-scraper',
