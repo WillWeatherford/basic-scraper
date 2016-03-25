@@ -2,6 +2,7 @@
 
 import re
 import sys
+import pprint
 import geocoder
 import requests
 from bs4 import BeautifulSoup
@@ -41,6 +42,14 @@ DEFAULT_PARAMS.update(dict(
 ERROR_PATTERN = r'Error: .*'
 
 INSPECTION_HTML_FILE = 'inspection_page.html'
+
+
+USABLE_RESULT_PARAMS = [
+    'Business Name',
+    'Number of Inspections',
+    'Highest Inspection Score',
+    'Average Inspection Score',
+]
 
 
 def get_inspection_page(**params):
@@ -160,13 +169,26 @@ def extract_score_data(listing):
     }
 
 
-def get_geojson(result):
+def get_geojson(insp_data):
     """Return geoJSON data from the address of a given inspection result."""
-    response = geocoder.google(result['Address'])
-    return response.geojson
+    address = insp_data.get('Address')
+    if not address:
+        return {}
+
+    insp_data = {key: insp_data[key] for key in USABLE_RESULT_PARAMS}
+
+    geojson = geocoder.google(address).geojson
+
+    prop = geojson['properties']
+
+    new_address = prop.get('address', prop.get('location', ''))
+    if new_address:
+        insp_data['Address'] = new_address
+    geojson['properties'] = insp_data
+    return geojson
 
 
-def generate_results(command='normal', **params):
+def generate_results(command, num_results, **params):
     """Generate dictionaries of inspection data results."""
     if command == 'normal':
         final_params = DEFAULT_PARAMS.copy()
@@ -178,23 +200,28 @@ def generate_results(command='normal', **params):
 
     soup = parse_source(content, encoding)
     listings = extract_data_listings(soup)
-    for listing in listings[:10]:
+    for listing in listings[:num_results]:
         metadata = extract_restaurant_metadata(listing)
         inspection_data = extract_score_data(listing)
         inspection_data.update(metadata)
         yield inspection_data
 
 
-def main(command='normal', **params):
+def main(command='normal', num_results=9999999, **params):
     """Main function to run from command line."""
-    for result in generate_results(command, **params):
-        print(get_geojson(result))
+    for result in generate_results(command, num_results, **params):
+        pprint.pprint(get_geojson(result))
 
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    if not args:
+    try:
+        num_results = int(args[0])
+    except IndexError:
+        print('Enter a number of results to parse.')
+        sys.exit()
+    try:
+        command = args[1]
+    except IndexError:
         command = 'normal'
-    elif args[0] == 'test':
-        command = 'test'
-    main(command=command)
+    main(command, num_results)
