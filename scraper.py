@@ -3,9 +3,11 @@
 import re
 import json
 import pprint
+import urllib
 import argparse
 import geocoder
 import requests
+import webbrowser
 from bs4 import BeautifulSoup
 
 DOMAIN = 'http://info.kingcounty.gov'
@@ -43,6 +45,7 @@ DEFAULT_PARAMS.update(dict(
 ERROR_PATTERN = r'Error: .*'
 
 INSPECTION_HTML_FILE = 'inspection_page.html'
+GEOJSON_URL = 'http://geojson.io/#data=data:application/json,{}'
 
 USABLE_RESULT_PARAMS = [
     'Business Name',
@@ -209,7 +212,15 @@ def generate_results(update=False, **params):
     return [extract_restaurant_data(listing) for listing in listings]
 
 
-def main(sortby='average', reverse=True, numresults=99999999, **params):
+def display_in_browser_geojson(collection):
+    """Open a new browser window at geojson.io to display map data."""
+    json_string = json.dumps(collection)
+    encoded = urllib.parse.quote(json_string)
+    return webbrowser.open_new(GEOJSON_URL.format(encoded))
+
+
+def main(sortby='average', reverse=True, browser=False, numresults=99999999,
+         dump=False, **params):
     """Main function to run from command line."""
     collection = {'type': 'FeatureCollection', 'features': []}
     results = generate_results(**params)
@@ -226,8 +237,12 @@ def main(sortby='average', reverse=True, numresults=99999999, **params):
         collection['features'].append(geojson)
         pprint.pprint(geojson)
 
-    with open('inspection_map.json', 'w') as fh:
-        json.dump(collection, fh)
+    if browser:
+        display_in_browser_geojson(collection)
+
+    if dump:
+        with open('inspection_map.json', 'w') as fh:
+            json.dump(collection, fh)
 
 
 def parse_params():
@@ -244,8 +259,10 @@ def parse_params():
                         help='Select a column on which to sort data.')
     parser.add_argument('-r', '--reverse', action='store_false',
                         help='Sort data in reverse order.')
-    parser.add_argument('-m', '--map', action='store_true',
+    parser.add_argument('-b', '--browser', action='store_true',
                         help='Sort data in reverse order.')
+    parser.add_argument('-d', '--dump', action='store_true',
+                        help='Save data in a .json file in local directory.')
 
     params = parser.parse_args()
     return vars(params)

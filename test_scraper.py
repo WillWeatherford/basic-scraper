@@ -16,23 +16,30 @@ ERROR_CASES = [
     (b'<html><span>Error: Something else...</span></html>', True)
 ]
 
+COLLECTION = {'type': 'FeatureCollection', 'features': [
+    {'properties': {'Address': '511 Boren Ave N, Seattle, WA 98109',
+                    'Business Name': 'Code Fellows'},
+     'type': 'Feature'}
+]}
+
 UPDATE = [
     ('-u', True),
     ('--update', True),
     ('', False)
 ]
 
-MAP = [
-    ('-m', True),
-    ('--map', True),
+BROWSER = [
+    ('-b', True),
+    ('--browser', True),
     ('', False)
 ]
 
 REVERSE = [
-    ('-r', True),
-    ('--reverse', True),
-    ('', False)
+    ('-r', False),
+    ('--reverse', False),
+    ('', True)
 ]
+
 SORTBY = [(syntax.format(choice), choice)
           for choice in SORT_CHOICES
           for syntax in ['-s {}', '--sortby={}']]
@@ -51,11 +58,11 @@ def update_param(request):
     return arg, dic
 
 
-@pytest.fixture(params=MAP)
-def map_param(request):
-    """Establish a fixture for the -m --map update console arg."""
+@pytest.fixture(params=BROWSER)
+def browser_param(request):
+    """Establish a fixture for the -b --browser update console arg."""
     arg, result = request.param
-    dic = {'map': result}
+    dic = {'browser': result}
     return arg, dic
 
 
@@ -84,10 +91,10 @@ def numresults_param(request):
 
 
 @pytest.fixture()
-def params(update_param, reverse_param, map_param,
+def params(update_param, reverse_param, browser_param,
            sortby_param, numresults_param):
     """Establish a fixture of multiple params for the -u update console arg."""
-    fixtures = [update_param, reverse_param, map_param,
+    fixtures = [update_param, reverse_param, browser_param,
                 sortby_param, numresults_param]
     argv = []
     expected = {}
@@ -173,6 +180,12 @@ def test_calculate_color():
     """Test that color choice is correct."""
     from scraper import calculate_color, COLORS
     pass
+
+
+def test_geojson_browser():
+    """Test that a browser window will open to geojson.io with test data."""
+    from scraper import display_in_browser_geojson
+    assert display_in_browser_geojson(COLLECTION)
 
 
 # def test_parse_web_source(good_params):
