@@ -1,9 +1,9 @@
 """Fetch data from kingcounty.gov using requests."""
 
 import re
-import sys
 import json
 import pprint
+import argparse
 import geocoder
 import requests
 from bs4 import BeautifulSoup
@@ -44,13 +44,21 @@ ERROR_PATTERN = r'Error: .*'
 
 INSPECTION_HTML_FILE = 'inspection_page.html'
 
-
 USABLE_RESULT_PARAMS = [
     'Business Name',
     'Number of Inspections',
     'Highest Inspection Score',
     'Average Inspection Score',
+    'marker-color',
 ]
+
+SORT_CHOICES = {
+    'count': 'Number of Inspections',
+    'highest': 'Highest Inspection Score',
+    'average': 'Average Inspection Score',
+}
+
+COLORS = ['CC0000', 'CC33000', 'CC6600', 'CC9900', 'CCCC00', 'CCFF00']
 
 
 def get_inspection_page(**params):
@@ -80,7 +88,7 @@ def get_inspection_page(**params):
     return content, encoding
 
 
-def has_error(content, encoding):
+def has_error(content, encoding='utf-8'):
     """Search HTML content to determine if content contains error message."""
     soup = BeautifulSoup(content, 'html5lib', from_encoding=encoding)
     return bool(soup.find(string=re.compile(ERROR_PATTERN)))
@@ -106,8 +114,8 @@ def parse_source(content, encoding='utf-8'):
 
 def extract_data_listings(soup):
     """Extract data listing divs which end with tilde."""
-    main_table = soup.find('table', id='container')
-    return main_table.find_all('div', id=lambda t: t.endswith('~'))
+    container = soup.find('table', id='container')
+    return container.find_all('div', id=lambda t: t.endswith('~'))
 
 
 def has_two_tds(tag):
@@ -125,7 +133,13 @@ def clean_data(tag):
         return ''
 
 
-def extract_restaurant_metadata(listing):
+def calculate_color(idx, segment, value):
+    """Calculate the color for listing at index, relative to the best."""
+    color_idx = int(value // segment)
+    return COLORS[min(color_idx, len(COLORS) - 1)]
+
+
+def extract_restaurant_data(listing):
     """Return a dictionary of the listing information for the restaurant."""
     data = {}
     meta_table = listing.find('tbody')
@@ -141,6 +155,18 @@ def extract_restaurant_metadata(listing):
             param = prev_param
             value = ' '.join([prev_value, value])
         data[param] = value
+
+    insp_rows = listing.find_all(is_ispection_row)
+    scores = [int(clean_data(list(row.children)[2])) for row in insp_rows]
+    num_scores = len(scores)
+    if scores:
+        highest = max(scores)
+        avg = float('{0:.2f}'.format(sum(scores) / float(num_scores)))
+    else:
+        highest, avg = 0, 0.0
+    data['Number of Inspections'] = num_scores
+    data['Highest Inspection Score'] = highest
+    data['Average Inspection Score'] = avg
     return data
 
 
@@ -153,35 +179,14 @@ def is_ispection_row(tag):
         (cells[2].string or '').isdigit()
 
 
-def extract_score_data(listing):
-    """Return dictionary of score data, including total, highest and avg."""
-    insp_rows = listing.find_all(is_ispection_row)
-    scores = [int(clean_data(list(row.children)[2])) for row in insp_rows]
-    num_scores = str(len(scores))
-    if scores:
-        highest = str(max(scores))
-        avg = '{0:.2f}'.format(sum(scores) / float(num_scores))
-    else:
-        highest, avg = 'N/A', 'N/A'
-    return {
-        'Number of Inspections': num_scores,
-        'Highest Inspection Score': highest,
-        'Average Inspection Score': avg
-    }
-
-
 def get_geojson(insp_data):
     """Return geoJSON data from the address of a given inspection result."""
     address = insp_data.get('Address')
     if not address:
         return {}
-
     insp_data = {key: insp_data[key] for key in USABLE_RESULT_PARAMS}
-
     geojson = geocoder.google(address).geojson
-
     prop = geojson['properties']
-
     new_address = prop.get('address', prop.get('location', ''))
     if new_address:
         insp_data['Address'] = new_address
@@ -189,45 +194,63 @@ def get_geojson(insp_data):
     return geojson
 
 
-def generate_results(command, num_results, **params):
+def generate_results(update=False, **params):
     """Generate dictionaries of inspection data results."""
-    if command == 'normal':
+    if update:
         final_params = DEFAULT_PARAMS.copy()
         final_params.update(params)
         content, encoding = get_inspection_page(**final_params)
         write_to_file(INSPECTION_HTML_FILE, content, encoding)
-    elif command == 'test':
+    else:
         content, encoding = read_from_file(INSPECTION_HTML_FILE)
 
     soup = parse_source(content, encoding)
     listings = extract_data_listings(soup)
-    for listing in listings[:num_results]:
-        metadata = extract_restaurant_metadata(listing)
-        inspection_data = extract_score_data(listing)
-        inspection_data.update(metadata)
-        yield inspection_data
+    return [extract_restaurant_data(listing) for listing in listings]
 
 
-def main(command='normal', num_results=9999999, **params):
+def main(sortby='average', reverse=True, numresults=99999999, **params):
     """Main function to run from command line."""
     collection = {'type': 'FeatureCollection', 'features': []}
-    for result in generate_results(command, num_results, **params):
+    results = generate_results(**params)
+
+    sortby = SORT_CHOICES[sortby]
+    results.sort(key=lambda d: d[sortby], reverse=reverse)
+
+    largest = results[reverse - 1][sortby]  # clever trick to find largest.
+    segment = largest / len(COLORS)
+
+    for idx, result in enumerate(results[:numresults]):
+        result['marker-color'] = calculate_color(idx, segment, result[sortby])
         geojson = get_geojson(result)
-        pprint.pprint(geojson)
         collection['features'].append(geojson)
+        pprint.pprint(geojson)
+
     with open('inspection_map.json', 'w') as fh:
         json.dump(collection, fh)
 
 
+def parse_params():
+    """Use argparse module to return parsed params for scraping."""
+    parser = argparse.ArgumentParser(
+        description='Display data on kingcounty.goc health inspections.')
+    parser.add_argument('-u', '--update', action='store_true',
+                        help='Make web request to kingcounty.gov to'
+                        'get latest data.')
+    parser.add_argument('-n', '--numresults', type=int, default=99999999,
+                        help='Number of rows to display.')
+    parser.add_argument('-s', '--sortby', type=str, default='average',
+                        choices=SORT_CHOICES,
+                        help='Select a column on which to sort data.')
+    parser.add_argument('-r', '--reverse', action='store_false',
+                        help='Sort data in reverse order.')
+    parser.add_argument('-m', '--map', action='store_true',
+                        help='Sort data in reverse order.')
+
+    params = parser.parse_args()
+    return vars(params)
+
+
 if __name__ == '__main__':
-    args = sys.argv[1:]
-    try:
-        num_results = int(args[0])
-    except IndexError:
-        print('Enter a number of results to parse.')
-        sys.exit()
-    try:
-        command = args[1]
-    except IndexError:
-        command = 'normal'
-    main(command, num_results)
+    params = parse_params()
+    main(**params)
